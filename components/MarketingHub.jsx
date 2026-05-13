@@ -11363,6 +11363,8 @@ function PackagingPortal({ tracker, setTracker, confirmed, setConfirmed, evoluti
   const [collapsed, setCollapsed] = useState({});
   const [expandedRow, setExpandedRow] = useState(null);
   const [cardDetailId, setCardDetailId] = useState(null);
+  const [moodModalId, setMoodModalId] = useState(null);
+  const [moodDragOver, setMoodDragOver] = useState(false);
   const [newItem, setNewItem] = useState({ brand: brandList[0]?.name || "Headchange", sku: "", packageType: PKG_TYPES[0], supplier: "", cost: "", contact: "", status: "Idea", notes: "" });
 
   const isEvolution = section === "evolution";
@@ -11415,12 +11417,19 @@ function PackagingPortal({ tracker, setTracker, confirmed, setConfirmed, evoluti
 
   const cs = { padding: "5px 8px", fontSize: 11, borderRight: "1px solid var(--border2)", display: "flex", alignItems: "center", overflow: "hidden" };
   const is8 = { background: "transparent", border: "none", color: "var(--text-dim)", fontSize: 11, fontFamily: "var(--bf)", outline: "none", width: "100%", padding: 0 };
-  const PGR = "30px 1fr 36px 100px 80px 80px 80px 100px 80px 28px";
+  const PGR = "30px 1fr 36px 44px 100px 80px 80px 80px 100px 80px 28px";
 
   const brandColor = (name) => brandList.find(b => b.name === name)?.color || "var(--gold)";
   const isImageAttachment = (d) => d.attachment && /^data:image\//.test(d.attachment);
   const moodCount = (d) => (d.moodboard || []).length;
   const detailItem = cardDetailId ? data.find(d => d.id === cardDetailId) : null;
+  const moodItem = moodModalId ? data.find(d => d.id === moodModalId) : null;
+  const handleMoodDrop = (e, id) => {
+    e.preventDefault();
+    setMoodDragOver(false);
+    const files = Array.from(e.dataTransfer?.files || []).filter(f => f.type.startsWith("image/"));
+    files.forEach(f => addMoodImage(id, f));
+  };
 
   const renderDetailBody = (d) => (
     <>
@@ -11468,27 +11477,11 @@ function PackagingPortal({ tracker, setTracker, confirmed, setConfirmed, evoluti
         )}
         {(d.elements || []).length === 0 && <div style={{ fontSize: 10, color: "var(--text-muted)", fontStyle: "italic" }}>No elements yet — add lid, label, insert, etc.</div>}
       </div>
-      {/* Mood Board — only in Packaging Evolution */}
-      {isEvolution && (
-        <div style={{ marginBottom: 14, padding: "12px 14px", border: "1px solid rgba(168,85,247,.2)", borderRadius: 8, background: "rgba(168,85,247,.04)" }}>
-          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8 }}>
-            <div style={{ fontSize: 10, letterSpacing: ".1em", textTransform: "uppercase", color: "#a855f7", fontWeight: 700 }}>🎨 Mood Board ({(d.moodboard || []).length})</div>
-            <button onClick={() => { const inp = document.createElement("input"); inp.type = "file"; inp.accept = "image/*"; inp.multiple = true; inp.onchange = e => { Array.from(e.target.files || []).forEach(f => addMoodImage(d.id, f)); }; inp.click(); }} style={{ fontSize: 10, color: "#a855f7", background: "rgba(168,85,247,.08)", border: "1px solid rgba(168,85,247,.3)", borderRadius: 4, padding: "4px 10px", cursor: "pointer", fontFamily: "var(--bf)", fontWeight: 600 }}>+ Upload Image{(d.moodboard || []).length === 0 ? "s" : ""}</button>
-          </div>
-          {(d.moodboard || []).length === 0 ? (
-            <div style={{ fontSize: 11, color: "var(--text-muted)", fontStyle: "italic", padding: "16px 0", textAlign: "center" }}>Drop in images to start vibing on concepts — packaging refs, color stories, textures, anything.</div>
-          ) : (
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(120px, 1fr))", gap: 8 }}>
-              {(d.moodboard || []).map(img => (
-                <div key={img.id} style={{ position: "relative", aspectRatio: "1 / 1", borderRadius: 6, overflow: "hidden", border: "1px solid var(--border)", background: "var(--surface)" }}>
-                  <img src={img.url} alt={img.name || "mood"} style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }} />
-                  <button onClick={() => removeMoodImage(d.id, img.id)} title="Remove" style={{ position: "absolute", top: 4, right: 4, width: 20, height: 20, borderRadius: "50%", border: "none", background: "rgba(0,0,0,.6)", color: "#fff", fontSize: 12, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", padding: 0 }}>×</button>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-      )}
+      {/* Mood Board entry point — modal handles the grid */}
+      <div style={{ marginBottom: 14 }}>
+        <div style={{ fontSize: 9, letterSpacing: ".1em", textTransform: "uppercase", color: "var(--text-muted)", fontWeight: 600, marginBottom: 4 }}>Mood Board</div>
+        <button onClick={() => setMoodModalId(d.id)} style={{ fontSize: 11, color: "#a855f7", background: "rgba(168,85,247,.08)", border: "1px solid rgba(168,85,247,.3)", borderRadius: 6, padding: "6px 12px", cursor: "pointer", fontFamily: "var(--bf)", fontWeight: 600 }}>🎨 Open Mood Board ({(d.moodboard || []).length})</button>
+      </div>
       {/* File attachment in detail */}
       <div>
         <div style={{ fontSize: 9, letterSpacing: ".1em", textTransform: "uppercase", color: "var(--text-muted)", fontWeight: 600, marginBottom: 4 }}>Attachments</div>
@@ -11512,8 +11505,8 @@ function PackagingPortal({ tracker, setTracker, confirmed, setConfirmed, evoluti
         </div>
         {/* Section tabs — Current vs Evolution */}
         <div style={{ display: "flex", gap: 4, marginBottom: 10, borderBottom: "1px solid var(--border)" }}>
-          <button onClick={() => { setSection("current"); setExpandedRow(null); setCardDetailId(null); }} style={{ padding: "8px 18px", fontSize: 12, border: "none", cursor: "pointer", background: "transparent", color: section === "current" ? "var(--gold)" : "var(--text-muted)", fontFamily: "var(--bf)", fontWeight: 600, borderBottom: section === "current" ? "2px solid var(--gold)" : "2px solid transparent", marginBottom: -1 }}>Current Packaging</button>
-          <button onClick={() => { setSection("evolution"); setExpandedRow(null); setCardDetailId(null); }} style={{ padding: "8px 18px", fontSize: 12, border: "none", cursor: "pointer", background: "transparent", color: section === "evolution" ? "#a855f7" : "var(--text-muted)", fontFamily: "var(--bf)", fontWeight: 600, borderBottom: section === "evolution" ? "2px solid #a855f7" : "2px solid transparent", marginBottom: -1 }}>Packaging Evolution</button>
+          <button onClick={() => { setSection("current"); setExpandedRow(null); setCardDetailId(null); setMoodModalId(null); }} style={{ padding: "8px 18px", fontSize: 12, border: "none", cursor: "pointer", background: "transparent", color: section === "current" ? "var(--gold)" : "var(--text-muted)", fontFamily: "var(--bf)", fontWeight: 600, borderBottom: section === "current" ? "2px solid var(--gold)" : "2px solid transparent", marginBottom: -1 }}>Current Packaging</button>
+          <button onClick={() => { setSection("evolution"); setExpandedRow(null); setCardDetailId(null); setMoodModalId(null); }} style={{ padding: "8px 18px", fontSize: 12, border: "none", cursor: "pointer", background: "transparent", color: section === "evolution" ? "#a855f7" : "var(--text-muted)", fontFamily: "var(--bf)", fontWeight: 600, borderBottom: section === "evolution" ? "2px solid #a855f7" : "2px solid transparent", marginBottom: -1 }}>Packaging Evolution</button>
         </div>
         <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
           <button className="btn btn-gold" style={{ fontSize: 11, padding: "6px 14px" }} onClick={() => setShowAddModal(true)}>+ Add SKU</button>
@@ -11603,9 +11596,7 @@ function PackagingPortal({ tracker, setTracker, confirmed, setConfirmed, evoluti
                               <div style={{ fontSize: 32, opacity: .25 }}>📦</div>
                             )}
                             <div style={{ position: "absolute", top: 8, right: 8, padding: "2px 8px", borderRadius: 10, fontSize: 9, fontWeight: 700, color: "#fff", background: statusColor, textTransform: "uppercase", letterSpacing: ".06em" }}>{d.status || "Idea"}</div>
-                            {isEvolution && moodCount(d) > 0 && (
-                              <div style={{ position: "absolute", bottom: 8, right: 8, padding: "2px 7px", borderRadius: 10, fontSize: 9, fontWeight: 700, color: "#fff", background: "rgba(168,85,247,.85)" }}>🎨 {moodCount(d)}</div>
-                            )}
+                            <button onClick={e => { e.stopPropagation(); setMoodModalId(d.id); }} title="Open mood board" style={{ position: "absolute", bottom: 8, right: 8, padding: "3px 8px", borderRadius: 10, fontSize: 9, fontWeight: 700, color: "#fff", background: moodCount(d) > 0 ? "rgba(168,85,247,.9)" : "rgba(0,0,0,.55)", border: "none", cursor: "pointer", fontFamily: "var(--bf)", backdropFilter: "blur(6px)" }}>🎨 {moodCount(d)}</button>
                           </div>
                           <div style={{ padding: "10px 12px 12px", display: "flex", flexDirection: "column", gap: 6, flex: 1 }}>
                             <div style={{ fontSize: 13, fontWeight: 600, color: "var(--text)", lineHeight: 1.3 }}>{d.sku || <span style={{ color: "var(--text-muted)", fontStyle: "italic" }}>(no name)</span>}</div>
@@ -11647,7 +11638,7 @@ function PackagingPortal({ tracker, setTracker, confirmed, setConfirmed, evoluti
                 {!isCollapsed && (
                   <div style={{ borderLeft: `3px solid ${brand.color}`, marginLeft: 16 }}>
                     <div style={{ display: "grid", gridTemplateColumns: PGR, borderBottom: "1px solid var(--border)", background: "var(--surface2)" }}>
-                      {["", "SKU", "💬", "Pkg Type", "Supplier", "Cost", "Contact", "Status", "File", ""].map((h, hi) => (
+                      {["", "SKU", "💬", "🎨", "Pkg Type", "Supplier", "Cost", "Contact", "Status", "File", ""].map((h, hi) => (
                         <div key={hi} style={{ padding: "6px 8px", fontSize: 9, fontWeight: 600, letterSpacing: ".08em", textTransform: "uppercase", color: "var(--text-muted)", borderRight: "1px solid var(--border2)" }}>{h}</div>
                       ))}
                     </div>
@@ -11660,6 +11651,9 @@ function PackagingPortal({ tracker, setTracker, confirmed, setConfirmed, evoluti
                         </div>
                         <div style={cs}><input value={d.sku||""} onChange={e => updateItem(d.id, "sku", e.target.value)} style={{ ...is8, fontWeight: 500, color: "var(--text)" }} /></div>
                         <div style={{ ...cs, overflow: "visible" }}><CommentBubble item={d} title={d.sku||d.brand} currentUser={currentUser} onUpdateComments={c => updateItem(d.id, "comments", c)} /></div>
+                        <div style={{ ...cs, justifyContent: "center" }}>
+                          <button onClick={() => setMoodModalId(d.id)} title="Open mood board" style={{ display: "inline-flex", alignItems: "center", gap: 3, padding: "2px 6px", borderRadius: 10, border: "1px solid rgba(168,85,247,.25)", background: moodCount(d) > 0 ? "rgba(168,85,247,.12)" : "transparent", color: "#a855f7", fontSize: 10, fontWeight: 600, cursor: "pointer", fontFamily: "var(--bf)" }}>🎨{moodCount(d) > 0 && <span>{moodCount(d)}</span>}</button>
+                        </div>
                         <div style={cs}><select value={d.packageType||""} onChange={e => updateItem(d.id, "packageType", e.target.value)} style={{ ...is8, fontSize: 10 }}>{PKG_TYPES.map(t => <option key={t}>{t}</option>)}</select></div>
                         <div style={cs}><input value={d.supplier||""} onChange={e => updateItem(d.id, "supplier", e.target.value)} style={is8} /></div>
                         <div style={cs}><input value={d.cost||""} onChange={e => updateItem(d.id, "cost", e.target.value)} style={{ ...is8, textAlign: "right" }} /></div>
@@ -11722,6 +11716,55 @@ function PackagingPortal({ tracker, setTracker, confirmed, setConfirmed, evoluti
             <div className="mfoot">
               <button className="btn" style={{ borderColor: "rgba(224,123,106,.3)", color: "#e07b6a" }} onClick={() => { if (confirm("Delete this SKU?")) { deleteItem(detailItem.id); setCardDetailId(null); } }}>Delete</button>
               <button className="btn btn-gold" onClick={() => setCardDetailId(null)}>Done</button>
+            </div>
+          </div>
+        </div>
+      )}
+      {/* Mood Board modal — available for every SKU, supports drag & drop */}
+      {moodItem && (
+        <div className="overlay" onClick={() => { setMoodModalId(null); setMoodDragOver(false); }}>
+          <div className="modal" onClick={e => e.stopPropagation()} style={{ maxWidth: 1000, width: "92vw" }}
+            onDragOver={e => { e.preventDefault(); if (!moodDragOver) setMoodDragOver(true); }}
+            onDragLeave={e => { if (e.currentTarget === e.target) setMoodDragOver(false); }}
+            onDrop={e => handleMoodDrop(e, moodItem.id)}>
+            <div className="mhdr" style={{ borderTop: "3px solid #a855f7", borderRadius: "16px 16px 0 0" }}>
+              <div className="mtitle" style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                <span>🎨</span>
+                <span>Mood Board — {moodItem.sku || "Untitled SKU"}</span>
+                <span style={{ fontSize: 10, color: "var(--text-muted)", fontWeight: 400 }}>· {moodItem.brand} · {moodCount(moodItem)} image{moodCount(moodItem) !== 1 ? "s" : ""}</span>
+              </div>
+              <button className="mclose" onClick={() => { setMoodModalId(null); setMoodDragOver(false); }}>×</button>
+            </div>
+            <div style={{ position: "relative", padding: "18px 22px", overflowY: "auto", maxHeight: "78vh", minHeight: 300, background: moodDragOver ? "rgba(168,85,247,.06)" : "transparent", transition: "background .12s" }}>
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 14 }}>
+                <div style={{ fontSize: 11, color: "var(--text-muted)" }}>Drag image files anywhere into this window, or click upload. Max 3 MB per image.</div>
+                <button onClick={() => { const inp = document.createElement("input"); inp.type = "file"; inp.accept = "image/*"; inp.multiple = true; inp.onchange = e => { Array.from(e.target.files || []).forEach(f => addMoodImage(moodItem.id, f)); }; inp.click(); }} style={{ fontSize: 11, color: "#a855f7", background: "rgba(168,85,247,.1)", border: "1px solid rgba(168,85,247,.35)", borderRadius: 6, padding: "6px 14px", cursor: "pointer", fontFamily: "var(--bf)", fontWeight: 600 }}>+ Upload Images</button>
+              </div>
+              {moodCount(moodItem) === 0 ? (
+                <div style={{ padding: "60px 20px", textAlign: "center", border: `2px dashed ${moodDragOver ? "#a855f7" : "var(--border)"}`, borderRadius: 12, color: "var(--text-muted)", transition: "border-color .12s" }}>
+                  <div style={{ fontSize: 40, opacity: .35, marginBottom: 12 }}>🎨</div>
+                  <div style={{ fontSize: 14, fontWeight: 600, color: "var(--text)", marginBottom: 4 }}>{moodDragOver ? "Drop to add images" : "No mood images yet"}</div>
+                  <div style={{ fontSize: 12 }}>Drag and drop packaging refs, color palettes, textures — anything that helps you vibe to new concepts.</div>
+                </div>
+              ) : (
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(160px, 1fr))", gap: 12 }}>
+                  {(moodItem.moodboard || []).map(img => (
+                    <div key={img.id} style={{ position: "relative", aspectRatio: "1 / 1", borderRadius: 8, overflow: "hidden", border: "1px solid var(--border)", background: "var(--surface)" }}>
+                      <img src={img.url} alt={img.name || "mood"} style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }} />
+                      <button onClick={() => removeMoodImage(moodItem.id, img.id)} title="Remove" style={{ position: "absolute", top: 6, right: 6, width: 22, height: 22, borderRadius: "50%", border: "none", background: "rgba(0,0,0,.65)", color: "#fff", fontSize: 13, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", padding: 0 }}>×</button>
+                      {img.name && <div style={{ position: "absolute", bottom: 0, left: 0, right: 0, padding: "4px 8px", background: "linear-gradient(to top, rgba(0,0,0,.7), transparent)", color: "#fff", fontSize: 9, fontFamily: "var(--bf)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{img.name}</div>}
+                    </div>
+                  ))}
+                </div>
+              )}
+              {moodDragOver && moodCount(moodItem) > 0 && (
+                <div style={{ position: "absolute", inset: 0, pointerEvents: "none", border: "2px dashed #a855f7", borderRadius: 8, margin: 10, display: "flex", alignItems: "center", justifyContent: "center", background: "rgba(168,85,247,.04)" }}>
+                  <div style={{ padding: "10px 18px", borderRadius: 999, background: "#a855f7", color: "#fff", fontWeight: 700, fontSize: 13 }}>Drop to add</div>
+                </div>
+              )}
+            </div>
+            <div className="mfoot">
+              <button className="btn btn-gold" onClick={() => { setMoodModalId(null); setMoodDragOver(false); }}>Done</button>
             </div>
           </div>
         </div>
