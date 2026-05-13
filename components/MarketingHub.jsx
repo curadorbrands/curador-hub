@@ -1039,6 +1039,8 @@ export default function MarketingHub({ initialUserName, isSessionAdmin }) {
   const [csBoardData, setCsBoardData] = useState([]);
   const [packagingTracker, setPackagingTracker] = useState([]);
   const [packagingConfirmed, setPackagingConfirmed] = useState([]);
+  const [packagingEvolutionTracker, setPackagingEvolutionTracker] = useState([]);
+  const [packagingEvolutionConfirmed, setPackagingEvolutionConfirmed] = useState([]);
   const [agencySubmissions, setAgencySubmissions] = useState([]);
   const [fieldAgenda, setFieldAgenda] = useState([]);
 
@@ -1302,6 +1304,12 @@ export default function MarketingHub({ initialUserName, isSessionAdmin }) {
   useEffect(() => { if (!ready) return; (async () => { const s = await window.storage.get("ns-packaging-confirmed", true).catch(() => null); if (s) setPackagingConfirmed(JSON.parse(s.value)); })(); }, [ready]);
   useEffect(() => { if (ready && packagingTracker.length > 0) window.storage.set("ns-packaging-tracker", JSON.stringify(packagingTracker), true).catch(() => {}); }, [packagingTracker, ready]);
   useEffect(() => { if (ready && packagingConfirmed.length > 0) window.storage.set("ns-packaging-confirmed", JSON.stringify(packagingConfirmed), true).catch(() => {}); }, [packagingConfirmed, ready]);
+  const pkgEvoTrackerLoadedRef = useRef(false);
+  const pkgEvoConfirmedLoadedRef = useRef(false);
+  useEffect(() => { if (!ready) return; (async () => { const s = await window.storage.get("ns-packaging-evolution-tracker", true).catch(() => null); if (s) { try { setPackagingEvolutionTracker(JSON.parse(s.value)); } catch {} } pkgEvoTrackerLoadedRef.current = true; })(); }, [ready]);
+  useEffect(() => { if (!ready) return; (async () => { const s = await window.storage.get("ns-packaging-evolution-confirmed", true).catch(() => null); if (s) { try { setPackagingEvolutionConfirmed(JSON.parse(s.value)); } catch {} } pkgEvoConfirmedLoadedRef.current = true; })(); }, [ready]);
+  useEffect(() => { if (!ready || !pkgEvoTrackerLoadedRef.current) return; window.storage.set("ns-packaging-evolution-tracker", JSON.stringify(packagingEvolutionTracker), true).catch(() => {}); }, [packagingEvolutionTracker, ready]);
+  useEffect(() => { if (!ready || !pkgEvoConfirmedLoadedRef.current) return; window.storage.set("ns-packaging-evolution-confirmed", JSON.stringify(packagingEvolutionConfirmed), true).catch(() => {}); }, [packagingEvolutionConfirmed, ready]);
   const agencyLoadedRef = useRef(false);
   const normalizeAgencySubs = (raw) => Array.isArray(raw) ? raw.filter(s => s && typeof s === "object" && typeof s.id === "string").map(s => ({ ...s, answers: s.answers && typeof s.answers === "object" ? s.answers : {} })) : [];
   useEffect(() => { if (!ready) return; (async () => { const s = await window.storage.get("ns-agency-submissions", true).catch(() => null); if (s) { try { setAgencySubmissions(normalizeAgencySubs(JSON.parse(s.value))); } catch {} } agencyLoadedRef.current = true; })(); }, [ready]);
@@ -2302,7 +2310,13 @@ export default function MarketingHub({ initialUserName, isSessionAdmin }) {
 
             {/* ── PACKAGING ── */}
             {leftTab === "packaging" && !activeBrand && (
-              <PackagingPortal tracker={packagingTracker} setTracker={setPackagingTracker} confirmed={packagingConfirmed} setConfirmed={setPackagingConfirmed} brands={brands} currentUser={currentUser} />
+              <PackagingPortal
+                tracker={packagingTracker} setTracker={setPackagingTracker}
+                confirmed={packagingConfirmed} setConfirmed={setPackagingConfirmed}
+                evolutionTracker={packagingEvolutionTracker} setEvolutionTracker={setPackagingEvolutionTracker}
+                evolutionConfirmed={packagingEvolutionConfirmed} setEvolutionConfirmed={setPackagingEvolutionConfirmed}
+                brands={brands} currentUser={currentUser}
+              />
             )}
 
             {/* ── COMPLIANCE ── */}
@@ -11338,18 +11352,26 @@ const PKG_STATUSES = ["Idea", "Sampled", "Approved", "Denied"];
 const PKG_ST_CLR = { "Idea": "#3b82f6", "Sampled": "#c9a84c", "Approved": "#22c55e", "Denied": "#e07b6a" };
 const PKG_TYPES = ["Box", "Jar", "Tube", "Mylar", "Pouch", "Bag", "Cart Box", "Display", "Label", "Wrap", "Other"];
 
-function PackagingPortal({ tracker, setTracker, confirmed, setConfirmed, brands, currentUser }) {
+function PackagingPortal({ tracker, setTracker, confirmed, setConfirmed, evolutionTracker, setEvolutionTracker, evolutionConfirmed, setEvolutionConfirmed, brands, currentUser }) {
   const brandList = brands ? Object.values(brands) : [];
+  const [section, setSection] = useState("current"); // "current" | "evolution"
   const [activeTab, setActiveTab] = useState("tracker");
+  const [viewMode, setViewMode] = useState("table"); // "table" | "cards"
   const [filterBrand, setFilterBrand] = useState("all");
   const [search, setSearch] = useState("");
   const [showAddModal, setShowAddModal] = useState(false);
   const [collapsed, setCollapsed] = useState({});
   const [expandedRow, setExpandedRow] = useState(null);
+  const [cardDetailId, setCardDetailId] = useState(null);
   const [newItem, setNewItem] = useState({ brand: brandList[0]?.name || "Headchange", sku: "", packageType: PKG_TYPES[0], supplier: "", cost: "", contact: "", status: "Idea", notes: "" });
 
-  const data = activeTab === "tracker" ? tracker : confirmed;
-  const setData = activeTab === "tracker" ? setTracker : setConfirmed;
+  const isEvolution = section === "evolution";
+  const data = isEvolution
+    ? (activeTab === "tracker" ? (evolutionTracker || []) : (evolutionConfirmed || []))
+    : (activeTab === "tracker" ? tracker : confirmed);
+  const setData = isEvolution
+    ? (activeTab === "tracker" ? setEvolutionTracker : setEvolutionConfirmed)
+    : (activeTab === "tracker" ? setTracker : setConfirmed);
 
   const updateItem = (id, field, val) => setData(p => p.map(d => d.id === id ? { ...d, [field]: val } : d));
   const deleteItem = (id) => setData(p => p.filter(d => d.id !== id));
@@ -11375,6 +11397,13 @@ function PackagingPortal({ tracker, setTracker, confirmed, setConfirmed, brands,
     r.readAsDataURL(file);
     updateItem(id, "attachmentName", file.name);
   };
+  const addMoodImage = (id, file) => {
+    if (!file || !file.type?.startsWith("image/") || file.size > 3 * 1024 * 1024) return;
+    const r = new FileReader();
+    r.onload = e => setData(p => p.map(d => d.id === id ? { ...d, moodboard: [...(d.moodboard || []), { id: `mb-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`, url: e.target.result, name: file.name, createdAt: new Date().toISOString() }] } : d));
+    r.readAsDataURL(file);
+  };
+  const removeMoodImage = (itemId, imgId) => setData(p => p.map(d => d.id === itemId ? { ...d, moodboard: (d.moodboard || []).filter(m => m.id !== imgId) } : d));
 
   const filtered = data.filter(d => {
     if (filterBrand !== "all" && d.brand !== filterBrand) return false;
@@ -11388,19 +11417,113 @@ function PackagingPortal({ tracker, setTracker, confirmed, setConfirmed, brands,
   const is8 = { background: "transparent", border: "none", color: "var(--text-dim)", fontSize: 11, fontFamily: "var(--bf)", outline: "none", width: "100%", padding: 0 };
   const PGR = "30px 1fr 36px 100px 80px 80px 80px 100px 80px 28px";
 
+  const brandColor = (name) => brandList.find(b => b.name === name)?.color || "var(--gold)";
+  const isImageAttachment = (d) => d.attachment && /^data:image\//.test(d.attachment);
+  const moodCount = (d) => (d.moodboard || []).length;
+  const detailItem = cardDetailId ? data.find(d => d.id === cardDetailId) : null;
+
+  const renderDetailBody = (d) => (
+    <>
+      {/* Notes */}
+      <div style={{ marginBottom: 14 }}>
+        <div style={{ fontSize: 9, letterSpacing: ".1em", textTransform: "uppercase", color: "var(--text-muted)", fontWeight: 600, marginBottom: 4 }}>Notes</div>
+        <textarea value={d.notes||""} onChange={e => updateItem(d.id, "notes", e.target.value)} placeholder="Add packaging notes, specs, dimensions..."
+          style={{ width: "100%", minHeight: 60, background: "var(--surface)", border: "1px solid var(--border)", borderRadius: 6, padding: "8px 10px", color: "var(--text)", fontSize: 12, fontFamily: "var(--bf)", outline: "none", resize: "vertical", lineHeight: 1.6 }} />
+      </div>
+      {/* Elements sub-table */}
+      <div style={{ marginBottom: 14 }}>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 6 }}>
+          <div style={{ fontSize: 9, letterSpacing: ".1em", textTransform: "uppercase", color: "var(--text-muted)", fontWeight: 600 }}>Package Elements ({(d.elements || []).length})</div>
+          <button onClick={() => addElement(d.id)} style={{ fontSize: 9, color: "var(--gold)", background: "none", border: "1px solid rgba(184,150,58,.2)", borderRadius: 4, padding: "3px 8px", cursor: "pointer", fontFamily: "var(--bf)", fontWeight: 600 }}>+ Add Element</button>
+        </div>
+        {(d.elements || []).length > 0 && (
+          <div style={{ border: "1px solid var(--border)", borderRadius: 6, overflowX: "auto" }}>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 70px 70px 80px 80px 60px 80px 70px 60px 60px 60px 70px 65px 65px 65px 1fr 24px", background: "var(--surface3)", borderBottom: "1px solid var(--border)", minWidth: 1100 }}>
+              {["Element", "Type", "Sample", "Hardware", "Specs", "CAD", "Sample Status", "Supplier", "Cost", "Current Cost", "Lead Time", "MOQ", "Touch Points", "Casability", "Sizing", "Notes", ""].map(h => (
+                <div key={h} style={{ padding: "4px 8px", fontSize: 8, fontWeight: 600, letterSpacing: ".08em", textTransform: "uppercase", color: "var(--text-muted)", borderRight: "1px solid var(--border2)" }}>{h}</div>
+              ))}
+            </div>
+            {(d.elements || []).map(el => (
+              <div key={el.id} style={{ display: "grid", gridTemplateColumns: "1fr 70px 70px 80px 80px 60px 80px 70px 60px 60px 60px 70px 65px 65px 65px 1fr 24px", borderBottom: "1px solid var(--border2)", minWidth: 1100 }}>
+                <div style={{ padding: "4px 8px" }}><input value={el.name||""} onChange={e => updateElement(d.id, el.id, "name", e.target.value)} placeholder="e.g. Lid, Label, Insert" style={{ ...is8, fontSize: 10 }} /></div>
+                <div style={{ padding: "4px 8px" }}><input value={el.type||""} onChange={e => updateElement(d.id, el.id, "type", e.target.value)} style={{ ...is8, fontSize: 10 }} /></div>
+                <div style={{ padding: "4px 8px" }}><select value={el.sampleType||""} onChange={e => updateElement(d.id, el.id, "sampleType", e.target.value)} style={{ ...is8, fontSize: 10, color: el.sampleType === "Custom" ? "#a855f7" : el.sampleType === "Stock" ? "#22c55e" : "var(--text-muted)" }}><option value="">—</option><option value="Stock">Stock</option><option value="Custom">Custom</option></select></div>
+                <div style={{ padding: "4px 8px" }}><input value={el.hardware||""} onChange={e => updateElement(d.id, el.id, "hardware", e.target.value)} placeholder="Device/supplier" style={{ ...is8, fontSize: 10 }} /></div>
+                <div style={{ padding: "4px 8px" }}><input value={el.specs||""} onChange={e => updateElement(d.id, el.id, "specs", e.target.value)} placeholder="Specs" style={{ ...is8, fontSize: 10 }} /></div>
+                <div style={{ padding: "4px 8px" }}>{el.cadFile ? (<div style={{ display: "flex", alignItems: "center", gap: 2 }}><span style={{ fontSize: 8, color: "var(--text-dim)", flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{el.cadFileName||"CAD"}</span><button onClick={() => { const a = document.createElement("a"); a.href = el.cadFile; a.download = el.cadFileName||"cad"; a.click(); }} style={{ fontSize: 7, color: "var(--gold)", background: "none", border: "none", cursor: "pointer", padding: 0 }}>DL</button><button onClick={() => { updateElement(d.id, el.id, "cadFile", null); updateElement(d.id, el.id, "cadFileName", ""); }} style={{ fontSize: 8, color: "#e07b6a", background: "none", border: "none", cursor: "pointer", padding: 0 }}>×</button></div>) : (<button onClick={() => { const inp = document.createElement("input"); inp.type = "file"; inp.onchange = ev => { const f = ev.target.files[0]; if (!f || f.size > 5*1024*1024) return; const r2 = new FileReader(); r2.onload = e2 => { updateElement(d.id, el.id, "cadFile", e2.target.result); updateElement(d.id, el.id, "cadFileName", f.name); }; r2.readAsDataURL(f); }; inp.click(); }} style={{ fontSize: 8, color: "var(--text-muted)", background: "none", border: "1px solid var(--border)", borderRadius: 3, padding: "1px 4px", cursor: "pointer", fontFamily: "var(--bf)" }}>+CAD</button>)}</div>
+                <div style={{ padding: "4px 8px" }}><select value={el.sampleStatus||""} onChange={e => updateElement(d.id, el.id, "sampleStatus", e.target.value)} style={{ ...is8, fontSize: 9, fontWeight: 600, color: el.sampleStatus === "Approved" ? "#22c55e" : el.sampleStatus === "Denied" ? "#e07b6a" : "var(--text-muted)" }}><option value="">—</option><option value="Pending">Pending</option><option value="Approved">Approved</option><option value="Denied">Denied</option></select></div>
+                <div style={{ padding: "4px 8px" }}><input value={el.supplier||""} onChange={e => updateElement(d.id, el.id, "supplier", e.target.value)} style={{ ...is8, fontSize: 10 }} /></div>
+                <div style={{ padding: "4px 8px" }}><input value={el.cost||""} onChange={e => updateElement(d.id, el.id, "cost", e.target.value)} style={{ ...is8, fontSize: 10 }} /></div>
+                <div style={{ padding: "4px 8px" }}><input value={el.currentCost||""} onChange={e => updateElement(d.id, el.id, "currentCost", e.target.value)} placeholder="Current $" style={{ ...is8, fontSize: 10 }} /></div>
+                <div style={{ padding: "4px 8px" }}><input value={el.leadTime||""} onChange={e => updateElement(d.id, el.id, "leadTime", e.target.value)} placeholder="e.g. 4wk" style={{ ...is8, fontSize: 10 }} /></div>
+                <div style={{ padding: "4px 8px" }}><input value={el.moq||""} onChange={e => updateElement(d.id, el.id, "moq", e.target.value)} placeholder="MOQ" style={{ ...is8, fontSize: 10 }} /></div>
+                <div style={{ padding: "4px 8px" }}><input value={el.touchPoints||""} onChange={e => updateElement(d.id, el.id, "touchPoints", e.target.value)} placeholder="Touch pts" style={{ ...is8, fontSize: 10 }} /></div>
+                <div style={{ padding: "4px 8px" }}><input value={el.casability||""} onChange={e => updateElement(d.id, el.id, "casability", e.target.value)} placeholder="Casability" style={{ ...is8, fontSize: 10 }} /></div>
+                <div style={{ padding: "4px 8px" }}><input value={el.sizing||""} onChange={e => updateElement(d.id, el.id, "sizing", e.target.value)} placeholder="Sizing" style={{ ...is8, fontSize: 10 }} /></div>
+                <div style={{ padding: "4px 8px" }}><input value={el.notes||""} onChange={e => updateElement(d.id, el.id, "notes", e.target.value)} style={{ ...is8, fontSize: 10 }} /></div>
+                <div style={{ padding: "4px 8px", display: "flex", alignItems: "center", justifyContent: "center" }}><button onClick={() => deleteElement(d.id, el.id)} style={{ fontSize: 10, color: "#e07b6a", background: "none", border: "none", cursor: "pointer", opacity: .4 }}>×</button></div>
+              </div>
+            ))}
+          </div>
+        )}
+        {(d.elements || []).length === 0 && <div style={{ fontSize: 10, color: "var(--text-muted)", fontStyle: "italic" }}>No elements yet — add lid, label, insert, etc.</div>}
+      </div>
+      {/* Mood Board — only in Packaging Evolution */}
+      {isEvolution && (
+        <div style={{ marginBottom: 14, padding: "12px 14px", border: "1px solid rgba(168,85,247,.2)", borderRadius: 8, background: "rgba(168,85,247,.04)" }}>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8 }}>
+            <div style={{ fontSize: 10, letterSpacing: ".1em", textTransform: "uppercase", color: "#a855f7", fontWeight: 700 }}>🎨 Mood Board ({(d.moodboard || []).length})</div>
+            <button onClick={() => { const inp = document.createElement("input"); inp.type = "file"; inp.accept = "image/*"; inp.multiple = true; inp.onchange = e => { Array.from(e.target.files || []).forEach(f => addMoodImage(d.id, f)); }; inp.click(); }} style={{ fontSize: 10, color: "#a855f7", background: "rgba(168,85,247,.08)", border: "1px solid rgba(168,85,247,.3)", borderRadius: 4, padding: "4px 10px", cursor: "pointer", fontFamily: "var(--bf)", fontWeight: 600 }}>+ Upload Image{(d.moodboard || []).length === 0 ? "s" : ""}</button>
+          </div>
+          {(d.moodboard || []).length === 0 ? (
+            <div style={{ fontSize: 11, color: "var(--text-muted)", fontStyle: "italic", padding: "16px 0", textAlign: "center" }}>Drop in images to start vibing on concepts — packaging refs, color stories, textures, anything.</div>
+          ) : (
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(120px, 1fr))", gap: 8 }}>
+              {(d.moodboard || []).map(img => (
+                <div key={img.id} style={{ position: "relative", aspectRatio: "1 / 1", borderRadius: 6, overflow: "hidden", border: "1px solid var(--border)", background: "var(--surface)" }}>
+                  <img src={img.url} alt={img.name || "mood"} style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }} />
+                  <button onClick={() => removeMoodImage(d.id, img.id)} title="Remove" style={{ position: "absolute", top: 4, right: 4, width: 20, height: 20, borderRadius: "50%", border: "none", background: "rgba(0,0,0,.6)", color: "#fff", fontSize: 12, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", padding: 0 }}>×</button>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+      {/* File attachment in detail */}
+      <div>
+        <div style={{ fontSize: 9, letterSpacing: ".1em", textTransform: "uppercase", color: "var(--text-muted)", fontWeight: 600, marginBottom: 4 }}>Attachments</div>
+        <button onClick={() => { const inp = document.createElement("input"); inp.type = "file"; inp.onchange = e => handleAttach(d.id, e.target.files[0]); inp.click(); }}
+          style={{ fontSize: 10, color: "var(--gold)", background: "none", border: "1px solid rgba(184,150,58,.2)", borderRadius: 4, padding: "4px 10px", cursor: "pointer", fontFamily: "var(--bf)" }}>+ Attach File</button>
+        {d.attachmentName && <span style={{ marginLeft: 8, fontSize: 10, color: "var(--text-dim)" }}>{d.attachmentName}</span>}
+      </div>
+    </>
+  );
+
   return (
     <div style={{ display: "flex", flexDirection: "column", height: "calc(100vh - 57px)", overflow: "hidden" }}>
       {/* Sticky toolbar */}
       <div style={{ padding: "12px 20px", borderBottom: "1px solid var(--border)", background: "var(--surface)", flexShrink: 0, position: "sticky", top: 0, zIndex: 10, backdropFilter: "blur(12px)" }}>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
-          <div style={{ fontFamily: "var(--df)", fontSize: 28, fontWeight: 300, color: "var(--text)" }}>Packaging</div>
+          <div style={{ display: "flex", alignItems: "baseline", gap: 14 }}>
+            <div style={{ fontFamily: "var(--df)", fontSize: 28, fontWeight: 300, color: "var(--text)" }}>Packaging</div>
+            <div style={{ fontSize: 10, letterSpacing: ".15em", textTransform: "uppercase", color: isEvolution ? "#a855f7" : "var(--gold)", fontWeight: 600 }}>{isEvolution ? "Evolution" : "Current"}</div>
+          </div>
           <div style={{ fontSize: 11, color: "var(--text-muted)" }}>{filtered.length} item{filtered.length !== 1 ? "s" : ""}</div>
+        </div>
+        {/* Section tabs — Current vs Evolution */}
+        <div style={{ display: "flex", gap: 4, marginBottom: 10, borderBottom: "1px solid var(--border)" }}>
+          <button onClick={() => { setSection("current"); setExpandedRow(null); setCardDetailId(null); }} style={{ padding: "8px 18px", fontSize: 12, border: "none", cursor: "pointer", background: "transparent", color: section === "current" ? "var(--gold)" : "var(--text-muted)", fontFamily: "var(--bf)", fontWeight: 600, borderBottom: section === "current" ? "2px solid var(--gold)" : "2px solid transparent", marginBottom: -1 }}>Current Packaging</button>
+          <button onClick={() => { setSection("evolution"); setExpandedRow(null); setCardDetailId(null); }} style={{ padding: "8px 18px", fontSize: 12, border: "none", cursor: "pointer", background: "transparent", color: section === "evolution" ? "#a855f7" : "var(--text-muted)", fontFamily: "var(--bf)", fontWeight: 600, borderBottom: section === "evolution" ? "2px solid #a855f7" : "2px solid transparent", marginBottom: -1 }}>Packaging Evolution</button>
         </div>
         <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
           <button className="btn btn-gold" style={{ fontSize: 11, padding: "6px 14px" }} onClick={() => setShowAddModal(true)}>+ Add SKU</button>
           <div style={{ display: "flex", gap: 2, padding: 2, background: "var(--surface2)", borderRadius: 6, border: "1px solid var(--border)" }}>
             <button onClick={() => setActiveTab("tracker")} style={{ padding: "4px 12px", fontSize: 10, borderRadius: 4, border: "none", cursor: "pointer", background: activeTab === "tracker" ? "var(--gold-dim)" : "transparent", color: activeTab === "tracker" ? "var(--gold)" : "var(--text-muted)", fontFamily: "var(--bf)", fontWeight: 600 }}>Tracker</button>
             <button onClick={() => setActiveTab("confirmed")} style={{ padding: "4px 12px", fontSize: 10, borderRadius: 4, border: "none", cursor: "pointer", background: activeTab === "confirmed" ? "var(--gold-dim)" : "transparent", color: activeTab === "confirmed" ? "var(--gold)" : "var(--text-muted)", fontFamily: "var(--bf)", fontWeight: 600 }}>Confirmed</button>
+          </div>
+          <div style={{ display: "flex", gap: 2, padding: 2, background: "var(--surface2)", borderRadius: 6, border: "1px solid var(--border)" }}>
+            <button onClick={() => setViewMode("table")} title="Table view" style={{ padding: "4px 10px", fontSize: 10, borderRadius: 4, border: "none", cursor: "pointer", background: viewMode === "table" ? "var(--gold-dim)" : "transparent", color: viewMode === "table" ? "var(--gold)" : "var(--text-muted)", fontFamily: "var(--bf)", fontWeight: 600 }}>☰ Table</button>
+            <button onClick={() => setViewMode("cards")} title="Card view" style={{ padding: "4px 10px", fontSize: 10, borderRadius: 4, border: "none", cursor: "pointer", background: viewMode === "cards" ? "var(--gold-dim)" : "transparent", color: viewMode === "cards" ? "var(--gold)" : "var(--text-muted)", fontFamily: "var(--bf)", fontWeight: 600 }}>▦ Cards</button>
           </div>
           <select value={filterBrand} onChange={e => setFilterBrand(e.target.value)} style={{ background: "var(--surface2)", border: "1px solid var(--border)", borderRadius: 6, padding: "6px 10px", color: "var(--text)", fontSize: 11, fontFamily: "var(--bf)", outline: "none" }}>
             <option value="all">All Brands</option>
@@ -11439,18 +11562,75 @@ function PackagingPortal({ tracker, setTracker, confirmed, setConfirmed, brands,
           </div>
         </div>
       )}
-      {/* Table */}
+      {/* Content area */}
       <div style={{ flex: 1, overflow: "auto", padding: "8px 20px" }}>
-        <div style={{ minWidth: 800 }}>
+        <div style={{ minWidth: viewMode === "table" ? 800 : 0 }}>
           {Object.keys(groups).length === 0 && data.length === 0 && (
             <div style={{ textAlign: "center", padding: "60px 40px" }}>
               <div style={{ fontSize: 40, opacity: .3, marginBottom: 16 }}>📦</div>
-              <div style={{ fontFamily: "var(--df)", fontSize: 22, fontWeight: 300, color: "var(--text)", marginBottom: 8 }}>{activeTab === "tracker" ? "Packaging Tracker" : "Confirmed Packaging"}</div>
-              <div style={{ fontSize: 13, color: "var(--text-muted)", marginBottom: 20 }}>No items yet. Add a SKU to get started.</div>
+              <div style={{ fontFamily: "var(--df)", fontSize: 22, fontWeight: 300, color: "var(--text)", marginBottom: 8 }}>{isEvolution ? "Packaging Evolution" : "Current Packaging"} · {activeTab === "tracker" ? "Tracker" : "Confirmed"}</div>
+              <div style={{ fontSize: 13, color: "var(--text-muted)", marginBottom: 20 }}>{isEvolution ? "No evolution concepts yet. Add a SKU to start exploring new directions." : "No items yet. Add a SKU to get started."}</div>
               <button className="btn btn-gold" onClick={() => setShowAddModal(true)}>+ Add SKU</button>
             </div>
           )}
-          {brandList.map(brand => {
+          {/* CARDS VIEW */}
+          {viewMode === "cards" && Object.keys(groups).length > 0 && brandList.map(brand => {
+            const items = groups[brand.name];
+            if (!items) return null;
+            const isCollapsed = collapsed[brand.name];
+            return (
+              <div key={brand.name} style={{ marginBottom: 22 }}>
+                <div onClick={() => setCollapsed(p => ({ ...p, [brand.name]: !p[brand.name] }))} style={{ padding: "10px 4px", cursor: "pointer", display: "flex", alignItems: "center", gap: 8, userSelect: "none" }}>
+                  <span style={{ fontSize: 10, display: "inline-block", transform: isCollapsed ? "rotate(0deg)" : "rotate(90deg)", transition: "transform .15s", color: brand.color }}>▶</span>
+                  <div style={{ width: 10, height: 10, borderRadius: "50%", background: brand.color }} />
+                  <span style={{ fontSize: 16, fontWeight: 700, color: brand.color }}>{brand.name}</span>
+                  <span style={{ fontSize: 10, color: "var(--text-muted)" }}>{items.length} SKU{items.length !== 1 ? "s" : ""}</span>
+                </div>
+                {!isCollapsed && (
+                  <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(220px, 1fr))", gap: 12, paddingLeft: 4 }}>
+                    {items.map(d => {
+                      const statusColor = PKG_ST_CLR[d.status] || "#888";
+                      const previewImg = isImageAttachment(d) ? d.attachment : ((d.moodboard || [])[0]?.url || null);
+                      return (
+                        <div key={d.id} onClick={() => setCardDetailId(d.id)}
+                          style={{ cursor: "pointer", background: "var(--surface)", border: "1px solid var(--border)", borderTop: `3px solid ${brand.color}`, borderRadius: 10, overflow: "hidden", display: "flex", flexDirection: "column", transition: "transform .12s, box-shadow .12s" }}
+                          onMouseEnter={e => { e.currentTarget.style.transform = "translateY(-2px)"; e.currentTarget.style.boxShadow = "0 6px 18px rgba(0,0,0,.08)"; }}
+                          onMouseLeave={e => { e.currentTarget.style.transform = "translateY(0)"; e.currentTarget.style.boxShadow = "none"; }}>
+                          <div style={{ aspectRatio: "4 / 3", background: previewImg ? "var(--surface2)" : "linear-gradient(135deg, var(--surface2), var(--surface3))", display: "flex", alignItems: "center", justifyContent: "center", position: "relative" }}>
+                            {previewImg ? (
+                              <img src={previewImg} alt={d.sku || "preview"} style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }} />
+                            ) : (
+                              <div style={{ fontSize: 32, opacity: .25 }}>📦</div>
+                            )}
+                            <div style={{ position: "absolute", top: 8, right: 8, padding: "2px 8px", borderRadius: 10, fontSize: 9, fontWeight: 700, color: "#fff", background: statusColor, textTransform: "uppercase", letterSpacing: ".06em" }}>{d.status || "Idea"}</div>
+                            {isEvolution && moodCount(d) > 0 && (
+                              <div style={{ position: "absolute", bottom: 8, right: 8, padding: "2px 7px", borderRadius: 10, fontSize: 9, fontWeight: 700, color: "#fff", background: "rgba(168,85,247,.85)" }}>🎨 {moodCount(d)}</div>
+                            )}
+                          </div>
+                          <div style={{ padding: "10px 12px 12px", display: "flex", flexDirection: "column", gap: 6, flex: 1 }}>
+                            <div style={{ fontSize: 13, fontWeight: 600, color: "var(--text)", lineHeight: 1.3 }}>{d.sku || <span style={{ color: "var(--text-muted)", fontStyle: "italic" }}>(no name)</span>}</div>
+                            <div style={{ fontSize: 10, color: "var(--text-muted)", display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
+                              {d.packageType && <span style={{ padding: "1px 7px", borderRadius: 8, background: "var(--surface2)", color: "var(--text-dim)" }}>{d.packageType}</span>}
+                              {d.supplier && <span title="Supplier">· {d.supplier}</span>}
+                            </div>
+                            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginTop: "auto", paddingTop: 6, fontSize: 10, color: "var(--text-muted)" }}>
+                              <span>{d.cost ? d.cost : "—"}</span>
+                              <span style={{ display: "flex", gap: 8 }}>
+                                <span title="Elements">⊞ {(d.elements || []).length}</span>
+                                <span title="Comments">💬 {(d.comments || []).length}</span>
+                              </span>
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            );
+          })}
+          {/* TABLE VIEW */}
+          {viewMode === "table" && brandList.map(brand => {
             const items = groups[brand.name];
             if (!items && filterBrand === "all") return null;
             if (!items) return null;
@@ -11501,57 +11681,7 @@ function PackagingPortal({ tracker, setTracker, confirmed, setConfirmed, brands,
                       {/* Expanded detail */}
                       {expandedRow === d.id && (
                         <div style={{ padding: "12px 16px 16px 46px", borderBottom: "1px solid var(--border2)", background: "var(--surface2)" }}>
-                          {/* Notes */}
-                          <div style={{ marginBottom: 14 }}>
-                            <div style={{ fontSize: 9, letterSpacing: ".1em", textTransform: "uppercase", color: "var(--text-muted)", fontWeight: 600, marginBottom: 4 }}>Notes</div>
-                            <textarea value={d.notes||""} onChange={e => updateItem(d.id, "notes", e.target.value)} placeholder="Add packaging notes, specs, dimensions..."
-                              style={{ width: "100%", minHeight: 60, background: "var(--surface)", border: "1px solid var(--border)", borderRadius: 6, padding: "8px 10px", color: "var(--text)", fontSize: 12, fontFamily: "var(--bf)", outline: "none", resize: "vertical", lineHeight: 1.6 }} />
-                          </div>
-                          {/* Elements sub-table */}
-                          <div style={{ marginBottom: 10 }}>
-                            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 6 }}>
-                              <div style={{ fontSize: 9, letterSpacing: ".1em", textTransform: "uppercase", color: "var(--text-muted)", fontWeight: 600 }}>Package Elements ({(d.elements || []).length})</div>
-                              <button onClick={() => addElement(d.id)} style={{ fontSize: 9, color: "var(--gold)", background: "none", border: "1px solid rgba(184,150,58,.2)", borderRadius: 4, padding: "3px 8px", cursor: "pointer", fontFamily: "var(--bf)", fontWeight: 600 }}>+ Add Element</button>
-                            </div>
-                            {(d.elements || []).length > 0 && (
-                              <div style={{ border: "1px solid var(--border)", borderRadius: 6, overflowX: "auto" }}>
-                                <div style={{ display: "grid", gridTemplateColumns: "1fr 70px 70px 80px 80px 60px 80px 70px 60px 60px 60px 70px 65px 65px 65px 1fr 24px", background: "var(--surface3)", borderBottom: "1px solid var(--border)", minWidth: 1100 }}>
-                                  {["Element", "Type", "Sample", "Hardware", "Specs", "CAD", "Sample Status", "Supplier", "Cost", "Current Cost", "Lead Time", "MOQ", "Touch Points", "Casability", "Sizing", "Notes", ""].map(h => (
-                                    <div key={h} style={{ padding: "4px 8px", fontSize: 8, fontWeight: 600, letterSpacing: ".08em", textTransform: "uppercase", color: "var(--text-muted)", borderRight: "1px solid var(--border2)" }}>{h}</div>
-                                  ))}
-                                </div>
-                                {(d.elements || []).map(el => (
-                                  <div key={el.id} style={{ display: "grid", gridTemplateColumns: "1fr 70px 70px 80px 80px 60px 80px 70px 60px 60px 60px 70px 65px 65px 65px 1fr 24px", borderBottom: "1px solid var(--border2)", minWidth: 1100 }}>
-                                    <div style={{ padding: "4px 8px" }}><input value={el.name||""} onChange={e => updateElement(d.id, el.id, "name", e.target.value)} placeholder="e.g. Lid, Label, Insert" style={{ ...is8, fontSize: 10 }} /></div>
-                                    <div style={{ padding: "4px 8px" }}><input value={el.type||""} onChange={e => updateElement(d.id, el.id, "type", e.target.value)} style={{ ...is8, fontSize: 10 }} /></div>
-                                    <div style={{ padding: "4px 8px" }}><select value={el.sampleType||""} onChange={e => updateElement(d.id, el.id, "sampleType", e.target.value)} style={{ ...is8, fontSize: 10, color: el.sampleType === "Custom" ? "#a855f7" : el.sampleType === "Stock" ? "#22c55e" : "var(--text-muted)" }}><option value="">—</option><option value="Stock">Stock</option><option value="Custom">Custom</option></select></div>
-                                    <div style={{ padding: "4px 8px" }}><input value={el.hardware||""} onChange={e => updateElement(d.id, el.id, "hardware", e.target.value)} placeholder="Device/supplier" style={{ ...is8, fontSize: 10 }} /></div>
-                                    <div style={{ padding: "4px 8px" }}><input value={el.specs||""} onChange={e => updateElement(d.id, el.id, "specs", e.target.value)} placeholder="Specs" style={{ ...is8, fontSize: 10 }} /></div>
-                                    <div style={{ padding: "4px 8px" }}>{el.cadFile ? (<div style={{ display: "flex", alignItems: "center", gap: 2 }}><span style={{ fontSize: 8, color: "var(--text-dim)", flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{el.cadFileName||"CAD"}</span><button onClick={() => { const a = document.createElement("a"); a.href = el.cadFile; a.download = el.cadFileName||"cad"; a.click(); }} style={{ fontSize: 7, color: "var(--gold)", background: "none", border: "none", cursor: "pointer", padding: 0 }}>DL</button><button onClick={() => { updateElement(d.id, el.id, "cadFile", null); updateElement(d.id, el.id, "cadFileName", ""); }} style={{ fontSize: 8, color: "#e07b6a", background: "none", border: "none", cursor: "pointer", padding: 0 }}>×</button></div>) : (<button onClick={() => { const inp = document.createElement("input"); inp.type = "file"; inp.onchange = ev => { const f = ev.target.files[0]; if (!f || f.size > 5*1024*1024) return; const r2 = new FileReader(); r2.onload = e2 => { updateElement(d.id, el.id, "cadFile", e2.target.result); updateElement(d.id, el.id, "cadFileName", f.name); }; r2.readAsDataURL(f); }; inp.click(); }} style={{ fontSize: 8, color: "var(--text-muted)", background: "none", border: "1px solid var(--border)", borderRadius: 3, padding: "1px 4px", cursor: "pointer", fontFamily: "var(--bf)" }}>+CAD</button>)}</div>
-                                    <div style={{ padding: "4px 8px" }}><select value={el.sampleStatus||""} onChange={e => updateElement(d.id, el.id, "sampleStatus", e.target.value)} style={{ ...is8, fontSize: 9, fontWeight: 600, color: el.sampleStatus === "Approved" ? "#22c55e" : el.sampleStatus === "Denied" ? "#e07b6a" : "var(--text-muted)" }}><option value="">—</option><option value="Pending">Pending</option><option value="Approved">Approved</option><option value="Denied">Denied</option></select></div>
-                                    <div style={{ padding: "4px 8px" }}><input value={el.supplier||""} onChange={e => updateElement(d.id, el.id, "supplier", e.target.value)} style={{ ...is8, fontSize: 10 }} /></div>
-                                    <div style={{ padding: "4px 8px" }}><input value={el.cost||""} onChange={e => updateElement(d.id, el.id, "cost", e.target.value)} style={{ ...is8, fontSize: 10 }} /></div>
-                                    <div style={{ padding: "4px 8px" }}><input value={el.currentCost||""} onChange={e => updateElement(d.id, el.id, "currentCost", e.target.value)} placeholder="Current $" style={{ ...is8, fontSize: 10 }} /></div>
-                                    <div style={{ padding: "4px 8px" }}><input value={el.leadTime||""} onChange={e => updateElement(d.id, el.id, "leadTime", e.target.value)} placeholder="e.g. 4wk" style={{ ...is8, fontSize: 10 }} /></div>
-                                    <div style={{ padding: "4px 8px" }}><input value={el.moq||""} onChange={e => updateElement(d.id, el.id, "moq", e.target.value)} placeholder="MOQ" style={{ ...is8, fontSize: 10 }} /></div>
-                                    <div style={{ padding: "4px 8px" }}><input value={el.touchPoints||""} onChange={e => updateElement(d.id, el.id, "touchPoints", e.target.value)} placeholder="Touch pts" style={{ ...is8, fontSize: 10 }} /></div>
-                                    <div style={{ padding: "4px 8px" }}><input value={el.casability||""} onChange={e => updateElement(d.id, el.id, "casability", e.target.value)} placeholder="Casability" style={{ ...is8, fontSize: 10 }} /></div>
-                                    <div style={{ padding: "4px 8px" }}><input value={el.sizing||""} onChange={e => updateElement(d.id, el.id, "sizing", e.target.value)} placeholder="Sizing" style={{ ...is8, fontSize: 10 }} /></div>
-                                    <div style={{ padding: "4px 8px" }}><input value={el.notes||""} onChange={e => updateElement(d.id, el.id, "notes", e.target.value)} style={{ ...is8, fontSize: 10 }} /></div>
-                                    <div style={{ padding: "4px 8px", display: "flex", alignItems: "center", justifyContent: "center" }}><button onClick={() => deleteElement(d.id, el.id)} style={{ fontSize: 10, color: "#e07b6a", background: "none", border: "none", cursor: "pointer", opacity: .4 }}>×</button></div>
-                                  </div>
-                                ))}
-                              </div>
-                            )}
-                            {(d.elements || []).length === 0 && <div style={{ fontSize: 10, color: "var(--text-muted)", fontStyle: "italic" }}>No elements yet — add lid, label, insert, etc.</div>}
-                          </div>
-                          {/* File attachment in detail */}
-                          <div>
-                            <div style={{ fontSize: 9, letterSpacing: ".1em", textTransform: "uppercase", color: "var(--text-muted)", fontWeight: 600, marginBottom: 4 }}>Attachments</div>
-                            <button onClick={() => { const inp = document.createElement("input"); inp.type = "file"; inp.onchange = e => handleAttach(d.id, e.target.files[0]); inp.click(); }}
-                              style={{ fontSize: 10, color: "var(--gold)", background: "none", border: "1px solid rgba(184,150,58,.2)", borderRadius: 4, padding: "4px 10px", cursor: "pointer", fontFamily: "var(--bf)" }}>+ Attach File</button>
-                            {d.attachmentName && <span style={{ marginLeft: 8, fontSize: 10, color: "var(--text-dim)" }}>{d.attachmentName}</span>}
-                          </div>
+                          {renderDetailBody(d)}
                         </div>
                       )}
                       </div>
@@ -11565,6 +11695,37 @@ function PackagingPortal({ tracker, setTracker, confirmed, setConfirmed, brands,
           })}
         </div>
       </div>
+      {/* Card detail modal */}
+      {detailItem && (
+        <div className="overlay" onClick={() => setCardDetailId(null)}>
+          <div className="modal" onClick={e => e.stopPropagation()} style={{ maxWidth: 1100, width: "92vw" }}>
+            <div className="mhdr" style={{ borderTop: `3px solid ${brandColor(detailItem.brand)}`, borderRadius: "16px 16px 0 0" }}>
+              <div className="mtitle" style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                <span style={{ width: 10, height: 10, borderRadius: "50%", background: brandColor(detailItem.brand) }} />
+                <span>{detailItem.sku || "Untitled SKU"}</span>
+                <span style={{ fontSize: 10, color: "var(--text-muted)", fontWeight: 400 }}>· {detailItem.brand} · {detailItem.packageType || "—"}</span>
+              </div>
+              <button className="mclose" onClick={() => setCardDetailId(null)}>×</button>
+            </div>
+            <div style={{ padding: "18px 22px", overflowY: "auto", maxHeight: "78vh" }}>
+              {/* Quick-edit header row */}
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr 1fr", gap: 10, marginBottom: 16 }}>
+                <div className="ff"><label className="fl">SKU</label><input className="fi" value={detailItem.sku||""} onChange={e => updateItem(detailItem.id, "sku", e.target.value)} /></div>
+                <div className="ff"><label className="fl">Pkg Type</label><select className="fsel" value={detailItem.packageType||""} onChange={e => updateItem(detailItem.id, "packageType", e.target.value)}>{PKG_TYPES.map(t => <option key={t}>{t}</option>)}</select></div>
+                <div className="ff"><label className="fl">Supplier</label><input className="fi" value={detailItem.supplier||""} onChange={e => updateItem(detailItem.id, "supplier", e.target.value)} /></div>
+                <div className="ff"><label className="fl">Cost</label><input className="fi" value={detailItem.cost||""} onChange={e => updateItem(detailItem.id, "cost", e.target.value)} /></div>
+                <div className="ff"><label className="fl">Contact</label><input className="fi" value={detailItem.contact||""} onChange={e => updateItem(detailItem.id, "contact", e.target.value)} /></div>
+                <div className="ff"><label className="fl">Status</label><select className="fsel" value={detailItem.status||"Idea"} onChange={e => updateItem(detailItem.id, "status", e.target.value)}>{PKG_STATUSES.map(s => <option key={s}>{s}</option>)}</select></div>
+              </div>
+              {renderDetailBody(detailItem)}
+            </div>
+            <div className="mfoot">
+              <button className="btn" style={{ borderColor: "rgba(224,123,106,.3)", color: "#e07b6a" }} onClick={() => { if (confirm("Delete this SKU?")) { deleteItem(detailItem.id); setCardDetailId(null); } }}>Delete</button>
+              <button className="btn btn-gold" onClick={() => setCardDetailId(null)}>Done</button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

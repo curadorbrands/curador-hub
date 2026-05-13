@@ -36,6 +36,8 @@ const ALLOWED_KEYS = new Set<string>([
   "ns-cs-board",
   "ns-packaging-tracker",
   "ns-packaging-confirmed",
+  "ns-packaging-evolution-tracker",
+  "ns-packaging-evolution-confirmed",
   "ns-design-requests",
   "ns-fieldteam-tree",
   "ns-centralized-contacts",
