@@ -11720,13 +11720,10 @@ function PackagingPortal({ tracker, setTracker, confirmed, setConfirmed, evoluti
           </div>
         </div>
       )}
-      {/* Mood Board modal — available for every SKU, supports drag & drop */}
+      {/* Mood Board modal — drag-and-drop is scoped to the drop zone only */}
       {moodItem && (
         <div className="overlay" onClick={() => { setMoodModalId(null); setMoodDragOver(false); }}>
-          <div className="modal" onClick={e => e.stopPropagation()} style={{ maxWidth: 1000, width: "92vw" }}
-            onDragOver={e => { e.preventDefault(); if (!moodDragOver) setMoodDragOver(true); }}
-            onDragLeave={e => { if (e.currentTarget === e.target) setMoodDragOver(false); }}
-            onDrop={e => handleMoodDrop(e, moodItem.id)}>
+          <div className="modal" onClick={e => e.stopPropagation()} style={{ maxWidth: 1000, width: "92vw" }}>
             <div className="mhdr" style={{ borderTop: "3px solid #a855f7", borderRadius: "16px 16px 0 0" }}>
               <div className="mtitle" style={{ display: "flex", alignItems: "center", gap: 10 }}>
                 <span>🎨</span>
@@ -11735,18 +11732,49 @@ function PackagingPortal({ tracker, setTracker, confirmed, setConfirmed, evoluti
               </div>
               <button className="mclose" onClick={() => { setMoodModalId(null); setMoodDragOver(false); }}>×</button>
             </div>
-            <div style={{ position: "relative", padding: "18px 22px", overflowY: "auto", maxHeight: "78vh", minHeight: 300, background: moodDragOver ? "rgba(168,85,247,.06)" : "transparent", transition: "background .12s" }}>
-              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 14 }}>
-                <div style={{ fontSize: 11, color: "var(--text-muted)" }}>Drag image files anywhere into this window, or click upload. Max 3 MB per image.</div>
-                <button onClick={() => { const inp = document.createElement("input"); inp.type = "file"; inp.accept = "image/*"; inp.multiple = true; inp.onchange = e => { Array.from(e.target.files || []).forEach(f => addMoodImage(moodItem.id, f)); }; inp.click(); }} style={{ fontSize: 11, color: "#a855f7", background: "rgba(168,85,247,.1)", border: "1px solid rgba(168,85,247,.35)", borderRadius: 6, padding: "6px 14px", cursor: "pointer", fontFamily: "var(--bf)", fontWeight: 600 }}>+ Upload Images</button>
-              </div>
-              {moodCount(moodItem) === 0 ? (
-                <div style={{ padding: "60px 20px", textAlign: "center", border: `2px dashed ${moodDragOver ? "#a855f7" : "var(--border)"}`, borderRadius: 12, color: "var(--text-muted)", transition: "border-color .12s" }}>
-                  <div style={{ fontSize: 40, opacity: .35, marginBottom: 12 }}>🎨</div>
-                  <div style={{ fontSize: 14, fontWeight: 600, color: "var(--text)", marginBottom: 4 }}>{moodDragOver ? "Drop to add images" : "No mood images yet"}</div>
-                  <div style={{ fontSize: 12 }}>Drag and drop packaging refs, color palettes, textures — anything that helps you vibe to new concepts.</div>
+            <div style={{ padding: "18px 22px", overflowY: "auto", maxHeight: "78vh", minHeight: 300 }}>
+              {/* The drop zone — ONLY this box accepts drops */}
+              <div
+                onDragEnter={e => { if (e.dataTransfer?.types?.includes("Files")) { e.preventDefault(); setMoodDragOver(true); } }}
+                onDragOver={e => { if (e.dataTransfer?.types?.includes("Files")) { e.preventDefault(); e.dataTransfer.dropEffect = "copy"; if (!moodDragOver) setMoodDragOver(true); } }}
+                onDragLeave={e => { if (!e.currentTarget.contains(e.relatedTarget)) setMoodDragOver(false); }}
+                onDrop={e => handleMoodDrop(e, moodItem.id)}
+                onClick={() => { const inp = document.createElement("input"); inp.type = "file"; inp.accept = "image/*"; inp.multiple = true; inp.onchange = e => { Array.from(e.target.files || []).forEach(f => addMoodImage(moodItem.id, f)); }; inp.click(); }}
+                style={{
+                  border: `2px dashed ${moodDragOver ? "#a855f7" : "var(--border)"}`,
+                  borderRadius: 12,
+                  padding: moodCount(moodItem) === 0 ? "56px 20px" : "20px",
+                  marginBottom: 16,
+                  textAlign: "center",
+                  background: moodDragOver ? "rgba(168,85,247,.1)" : "transparent",
+                  transition: "border-color .12s, background .12s",
+                  cursor: "pointer",
+                  userSelect: "none",
+                }}
+              >
+                {/* Block pointer events on children so onDragLeave doesn't fire when moving over the icon/text */}
+                <div style={{ pointerEvents: "none" }}>
+                  {moodDragOver ? (
+                    <>
+                      <div style={{ fontSize: 36, marginBottom: 8 }}>📥</div>
+                      <div style={{ fontSize: 15, fontWeight: 700, color: "#a855f7" }}>Drop to add to mood board</div>
+                    </>
+                  ) : moodCount(moodItem) === 0 ? (
+                    <>
+                      <div style={{ fontSize: 40, opacity: .35, marginBottom: 12 }}>🎨</div>
+                      <div style={{ fontSize: 14, fontWeight: 600, color: "var(--text)", marginBottom: 4 }}>No mood images yet</div>
+                      <div style={{ fontSize: 12, color: "var(--text-muted)" }}>Drag image files into this box, or click to upload. Max 3 MB per image.</div>
+                    </>
+                  ) : (
+                    <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 10, color: "var(--text-muted)", fontSize: 12 }}>
+                      <span style={{ fontSize: 18, opacity: .6 }}>📥</span>
+                      <span><span style={{ color: "#a855f7", fontWeight: 600 }}>Drag images here</span> or click to upload</span>
+                    </div>
+                  )}
                 </div>
-              ) : (
+              </div>
+              {/* Image grid — outside the drop zone so dragging over thumbnails doesn't fire drop events */}
+              {moodCount(moodItem) > 0 && (
                 <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(160px, 1fr))", gap: 12 }}>
                   {(moodItem.moodboard || []).map(img => (
                     <div key={img.id} style={{ position: "relative", aspectRatio: "1 / 1", borderRadius: 8, overflow: "hidden", border: "1px solid var(--border)", background: "var(--surface)" }}>
@@ -11755,11 +11783,6 @@ function PackagingPortal({ tracker, setTracker, confirmed, setConfirmed, evoluti
                       {img.name && <div style={{ position: "absolute", bottom: 0, left: 0, right: 0, padding: "4px 8px", background: "linear-gradient(to top, rgba(0,0,0,.7), transparent)", color: "#fff", fontSize: 9, fontFamily: "var(--bf)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{img.name}</div>}
                     </div>
                   ))}
-                </div>
-              )}
-              {moodDragOver && moodCount(moodItem) > 0 && (
-                <div style={{ position: "absolute", inset: 0, pointerEvents: "none", border: "2px dashed #a855f7", borderRadius: 8, margin: 10, display: "flex", alignItems: "center", justifyContent: "center", background: "rgba(168,85,247,.04)" }}>
-                  <div style={{ padding: "10px 18px", borderRadius: 999, background: "#a855f7", color: "#fff", fontWeight: 700, fontSize: 13 }}>Drop to add</div>
                 </div>
               )}
             </div>
