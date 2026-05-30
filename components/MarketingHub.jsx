@@ -1,6 +1,5 @@
 "use client";
 import { useState, useEffect, useRef, useCallback } from "react";
-import AssetLibrary from "./AssetLibrary";
 
 // Storage layer — shared keys go to Supabase via /api/store, local keys use localStorage
 // Always override window.storage so the API-calling version is never blocked by a pre-existing stub
@@ -2339,29 +2338,47 @@ export default function MarketingHub({ initialUserName, isSessionAdmin }) {
               <GanttViewer ganttHtml={ganttHtml} onUpdate={setGanttHtml} canEdit={canEdit} timelineItems={timelineItems} setTimelineItems={setTimelineItems} currentUser={currentUser} initiatives={initiatives} campaigns={campaigns} canAddContent={canAddContent} />
             )}
 
-            {/* ── ASSET LIBRARY ── */}
+            {/* ── ASSET LIBRARY (sunset notice — moved to CuradorOS) ── */}
             {leftTab === "dam" && !activeBrand && (
-              <AssetLibrary
-                assets={damAssets} setAssets={setDamAssets}
-                driveAssets={damDriveAssets} setDriveAssets={setDamDriveAssets}
-                activeType={damType} setActiveType={setDamType}
-                activeBrand={damBrand} setActiveBrand={setDamBrand}
-                search={damSearch} setSearch={setDamSearch}
-                view={damView} setView={setDamView}
-                merchOpen={damMerchOpen} setMerchOpen={setDamMerchOpen}
-                packagingOpen={damPackagingOpen} setPackagingOpen={setDamPackagingOpen}
-                addOpen={damAddOpen} setAddOpen={setDamAddOpen}
-                preview={damPreview} setPreview={setDamPreview}
-                config={damConfig} setConfig={setDamConfig}
-                folders={damFolders} setFolders={setDamFolders}
-                connected={damConnected} setConnected={setDamConnected}
-                syncing={damSyncing} setSyncing={setDamSyncing}
-                settingsOpen={damSettingsOpen} setSettingsOpen={setDamSettingsOpen}
-                currentUser={currentUser}
-                hubBrands={brands}
-                hubCampaigns={campaigns}
-                onNote={(ctx) => addNoteWithContext(ctx)}
-              />
+              <div style={{ minHeight: "calc(100vh - 60px)", display: "flex", alignItems: "center", justifyContent: "center", padding: "60px 32px" }}>
+                <div style={{ maxWidth: 520, textAlign: "center", padding: "48px 40px", background: "rgba(255,255,255,.02)", border: "1px solid var(--border)", borderRadius: 14, boxShadow: "0 10px 60px -20px rgba(0,0,0,.6)" }}>
+                  <div style={{ width: 56, height: 56, margin: "0 auto 22px", display: "grid", placeItems: "center", borderRadius: "50%", background: "linear-gradient(135deg, var(--gold), #a07030)", color: "#fff", fontSize: 26 }}>
+                    ◈
+                  </div>
+                  <div style={{ fontFamily: "var(--df)", fontSize: 22, fontWeight: 400, color: "var(--gold)", marginBottom: 10 }}>
+                    Asset Library has moved
+                  </div>
+                  <p style={{ fontFamily: "var(--bf)", fontSize: 14, lineHeight: 1.6, color: "var(--text-muted)", margin: "0 0 28px" }}>
+                    The Marketing Asset Library now lives in CuradorOS, with real uploads (images, PDFs, video up to 500MB), per-asset and folder-level external sharing with audit logs, and revocable links for agencies + retailers. Pick up where you left off there.
+                  </p>
+                  <a
+                    href="https://www.curadoros.com/admin/assets"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    style={{
+                      display: "inline-block",
+                      padding: "12px 26px",
+                      background: "var(--gold)",
+                      color: "#0a0a13",
+                      fontFamily: "var(--bf)",
+                      fontSize: 13,
+                      fontWeight: 600,
+                      letterSpacing: ".06em",
+                      textTransform: "uppercase",
+                      textDecoration: "none",
+                      borderRadius: 8,
+                      transition: "opacity .15s",
+                    }}
+                    onMouseEnter={(e) => { e.currentTarget.style.opacity = "0.88"; }}
+                    onMouseLeave={(e) => { e.currentTarget.style.opacity = "1"; }}
+                  >
+                    Open Asset Library →
+                  </a>
+                  <p style={{ marginTop: 22, fontFamily: "var(--mf)", fontSize: 10, color: "var(--text-muted)", letterSpacing: ".08em", textTransform: "uppercase" }}>
+                    curadoros.com / admin / assets
+                  </p>
+                </div>
+              </div>
             )}
 
             {/* ── COMPANY / BRAND DETAIL FULL VIEW ── */}
